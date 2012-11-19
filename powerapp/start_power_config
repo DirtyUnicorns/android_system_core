@@ -52,11 +52,11 @@ case "$1" in
          case "$soc_id" in
          "134" | "152")
                 echo -n "Starting powerconfig for 9x25: "
-                echo 0 > /sys/module/pm_8x60/modes/cpu0/power_collapse/suspend_enabled
-                echo 0 > /sys/module/pm_8x60/modes/cpu0/standalone_power_collapse/suspend_enabled
+                echo 1 > /sys/module/pm_8x60/modes/cpu0/power_collapse/suspend_enabled
+                echo 1 > /sys/module/pm_8x60/modes/cpu0/standalone_power_collapse/suspend_enabled
                 echo 0 > /sys/module/pm_8x60/modes/cpu0/power_collapse/idle_enabled
                 echo 0 > /sys/module/pm_8x60/modes/cpu0/standalone_power_collapse/idle_enabled
-                echo 0 > /sys/module/lpm_resources/enable_low_power/pxo
+                echo 1 > /sys/module/lpm_resources/enable_low_power/pxo
                 echo 0 > /sys/module/lpm_resources/enable_low_power/vdd_dig
                 echo 0 > /sys/module/lpm_resources/enable_low_power/vdd_mem
                 echo "done";
