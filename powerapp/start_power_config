@@ -82,6 +82,7 @@ case "$1" in
                 echo ondemand > /sys/devices/system/cpu/cpu1/cpufreq/scaling_governor
                 chmod 664 /sys/devices/system/cpu/cpu1/online
                 echo 10 > /sys/devices/platform/msm_sdcc.3/idle_timeout
+                echo 50000 > /sys/devices/system/cpu/cpufreq/ondemand/sampling_rate
                 echo 90 > /sys/devices/system/cpu/cpufreq/ondemand/up_threshold
                 echo 1 > /sys/devices/system/cpu/cpufreq/ondemand/io_is_busy
                 echo 4 > /sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
