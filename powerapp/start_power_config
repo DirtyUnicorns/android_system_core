@@ -65,7 +65,7 @@ case "$1" in
          esac
 
          case "$soc_id" in
-         "116" | "142")
+         "116" | "142" | "154")
                 echo -n "Starting powerconfig for 8x30: "
                 echo 1 > /sys/module/pm_8x60/modes/cpu0/power_collapse/suspend_enabled
                 echo 1 > /sys/module/pm_8x60/modes/cpu1/power_collapse/suspend_enabled
