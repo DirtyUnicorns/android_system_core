@@ -62,6 +62,7 @@
 #include "selinux.h"
 #include "subcontext.h"
 #include "util.h"
+#include "vendor_init.h"
 
 using namespace std::literals;
 
