@@ -168,7 +168,7 @@ case "$1" in
           "147" | "161" | "162" | "163" | "164" | "165" | "166")
                 set +e
                 echo -n "Starting powerconfig for 8610: "
-                echo 3 > /sys/module/lpm_levels/enable_low_power/l2
+                echo 4 > /sys/module/lpm_levels/enable_low_power/l2
                 echo 1 > /sys/module/pm_8x60/modes/cpu0/power_collapse/suspend_enabled
                 echo 1 > /sys/module/pm_8x60/modes/cpu0/standalone_power_collapse/suspend_enabled
                 echo 1 > /sys/module/pm_8x60/modes/cpu0/standalone_power_collapse/idle_enabled
