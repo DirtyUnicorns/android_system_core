@@ -102,21 +102,107 @@ static const char *ENV[32];
 
 static unsigned emmc_boot = 0;
 
+static unsigned lpm_bootmode = 0;
+
+static const char *expand_environment(const char *val)
+{
+    int n;
+    const char *prev_pos = NULL, *copy_pos;
+    size_t len, prev_len = 0, copy_len;
+    char *expanded;
+
+    /* Basic expansion of environment variable; for now
+       we only assume 1 expansion at the start of val
+       and that it is marked as ${var} */
+    if (!val) {
+        return NULL;
+    }
+
+    if ((val[0] == '$') && (val[1] == '{')) {
+        for (n = 0; n < 31; n++) {
+            if (ENV[n]) {
+                len = strcspn(ENV[n], "=");
+                if (!strncmp(&val[2], ENV[n], len)
+                      && (val[2 + len] == '}')) {
+                    /* Matched existing env */
+                    prev_pos = &ENV[n][len + 1];
+                    prev_len = strlen(prev_pos);
+                    break;
+                }
+            }
+        }
+        copy_pos = index(val, '}');
+        if (copy_pos) {
+            copy_pos++;
+            copy_len = strlen(copy_pos);
+        } else {
+            copy_pos = val;
+            copy_len = strlen(val);
+        }
+    } else {
+        copy_pos = val;
+        copy_len = strlen(val);
+    }
+
+    len = prev_len + copy_len + 1;
+    expanded = malloc(len);
+    if (expanded) {
+        if (prev_pos) {
+            snprintf(expanded, len, "%s%s", prev_pos, copy_pos);
+        } else {
+            snprintf(expanded, len, "%s", copy_pos);
+        }
+    }
+
+    /* caller free */
+    return expanded;
+}
+
 /* add_environment - add "key=value" to the current environment */
 int add_environment(const char *key, const char *val)
 {
     int n;
+    const char *expanded;
+
+    expanded = expand_environment(val);
+    if (!expanded) {
+        goto failed;
+    }
 
     for (n = 0; n < 31; n++) {
         if (!ENV[n]) {
-            size_t len = strlen(key) + strlen(val) + 2;
+            size_t len = strlen(key) + strlen(expanded) + 2;
             char *entry = malloc(len);
-            snprintf(entry, len, "%s=%s", key, val);
+            if (!entry) {
+                goto failed_cleanup;
+            }
+            snprintf(entry, len, "%s=%s", key, expanded);
+            free((char *)expanded);
             ENV[n] = entry;
             return 0;
+        } else {
+            char *entry;
+            size_t len = strlen(key);
+            if(!strncmp(ENV[n], key, len) && ENV[n][len] == '=') {
+                len = len + strlen(expanded) + 2;
+                entry = malloc(len);
+                if (!entry) {
+                    goto failed_cleanup;
+                }
+
+                free((char *)ENV[n]);
+                snprintf(entry, len, "%s=%s", key, expanded);
+                free((char *)expanded);
+                ENV[n] = entry;
+                return 0;
+            }
         }
     }
 
+failed_cleanup:
+    free((char *)expanded);
+failed:
+    ERROR("Fail to add env variable: %s. Not enough memory!", key);
     return 1;
 }
 
@@ -257,14 +343,12 @@ void service_start(struct service *svc, const char *dynamic_args)
         for (ei = svc->envvars; ei; ei = ei->next)
             add_environment(ei->name, ei->value);
 
-        setsockcreatecon(scon);
-
         for (si = svc->sockets; si; si = si->next) {
             int socket_type = (
                     !strcmp(si->type, "stream") ? SOCK_STREAM :
                         (!strcmp(si->type, "dgram") ? SOCK_DGRAM : SOCK_SEQPACKET));
             int s = create_socket(si->name, socket_type,
-                                  si->perm, si->uid, si->gid);
+                                  si->perm, si->uid, si->gid, si->socketcon ?: scon);
             if (s >= 0) {
                 publish_socket(si->name, s);
             }
@@ -272,7 +356,6 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         freecon(scon);
         scon = NULL;
-        setsockcreatecon(NULL);
 
         if (svc->ioprio_class != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
@@ -725,6 +808,12 @@ static void import_kernel_nv(char *name, int for_emulator)
             emmc_boot = 1;
         }
 #endif
+#ifdef BOARD_LPM_BOOT_ARGUMENT_NAME
+    } else if (!strcmp(name,BOARD_LPM_BOOT_ARGUMENT_NAME)) {
+        if (!strcmp(value,BOARD_LPM_BOOT_ARGUMENT_VALUE)) {
+            lpm_bootmode = 1;
+        }
+#endif
     } else if (!strncmp(name, "androidboot.", 12) && name_len > 12) {
         const char *boot_prop_name = name + 12;
         char prop[PROP_NAME_MAX];
@@ -733,6 +822,10 @@ static void import_kernel_nv(char *name, int for_emulator)
         cnt = snprintf(prop, sizeof(prop), "ro.boot.%s", boot_prop_name);
         if (cnt < PROP_NAME_MAX)
             property_set(prop, value);
+#ifdef HAS_SEMC_BOOTLOADER
+    } else if (!strcmp(name,"serialno")) {
+        property_set("ro.boot.serialno", value);
+#endif
     }
 }
 
@@ -989,7 +1082,7 @@ static void selinux_initialize(void)
 static int charging_mode_booting(void)
 {
 #ifndef BOARD_CHARGING_MODE_BOOTING_LPM
-	return 0;
+	return lpm_bootmode;
 #else
 	int f;
 	char cmb;

@@ -84,17 +84,23 @@ unsigned int decode_uid(const char *s)
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-int create_socket(const char *name, int type, mode_t perm, uid_t uid, gid_t gid)
+int create_socket(const char *name, int type, mode_t perm, uid_t uid, gid_t gid, const char *socketcon)
 {
     struct sockaddr_un addr;
     int fd, ret;
-    char *secon;
+    char *filecon;
+
+    if (socketcon)
+        setsockcreatecon(socketcon);
 
     fd = socket(PF_UNIX, type, 0);
     if (fd < 0) {
         ERROR("Failed to open socket '%s': %s\n", name, strerror(errno));
         return -1;
     }
+
+    if (socketcon)
+        setsockcreatecon(NULL);
 
     memset(&addr, 0 , sizeof(addr));
     addr.sun_family = AF_UNIX;
@@ -107,11 +113,11 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid, gid_t gid)
         goto out_close;
     }
 
-    secon = NULL;
+    filecon = NULL;
     if (sehandle) {
-        ret = selabel_lookup(sehandle, &secon, addr.sun_path, S_IFSOCK);
+        ret = selabel_lookup(sehandle, &filecon, addr.sun_path, S_IFSOCK);
         if (ret == 0)
-            setfscreatecon(secon);
+            setfscreatecon(filecon);
     }
 
     ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
@@ -121,7 +127,7 @@ int create_socket(const char *name, int type, mode_t perm, uid_t uid, gid_t gid)
     }
 
     setfscreatecon(NULL);
-    freecon(secon);
+    freecon(filecon);
 
     chown(addr.sun_path, uid, gid);
     chmod(addr.sun_path, perm);
@@ -493,31 +499,50 @@ int make_dir(const char *path, mode_t mode)
     return rc;
 }
 
-int restorecon(const char *pathname)
+static int restorecon_sb(const char *pathname, const struct stat *sb)
 {
     char *secontext = NULL;
-    struct stat sb;
+    char *oldsecontext = NULL;
     int i;
+
+    if (selabel_lookup(sehandle, &secontext, pathname, sb->st_mode) < 0)
+        return -errno;
+
+    if (lgetfilecon(pathname, &oldsecontext) < 0) {
+        freecon(secontext);
+        return -errno;
+    }
+
+    if (strcmp(oldsecontext, secontext) != 0) {
+        if (lsetfilecon(pathname, secontext) < 0) {
+            freecon(oldsecontext);
+            freecon(secontext);
+            return -errno;
+        }
+    }
+    freecon(oldsecontext);
+    freecon(secontext);
+    return 0;
+}
+
+int restorecon(const char *pathname)
+{
+    struct stat sb;
 
     if (is_selinux_enabled() <= 0 || !sehandle)
         return 0;
 
     if (lstat(pathname, &sb) < 0)
         return -errno;
-    if (selabel_lookup(sehandle, &secontext, pathname, sb.st_mode) < 0)
-        return -errno;
-    if (lsetfilecon(pathname, secontext) < 0) {
-        freecon(secontext);
-        return -errno;
-    }
-    freecon(secontext);
-    return 0;
+
+    return restorecon_sb(pathname, &sb);
 }
 
 static int nftw_restorecon(const char* filename, const struct stat* statptr,
-    int fileflags, struct FTW* pftw)
+    int fileflags __attribute__((unused)),
+    struct FTW* pftw __attribute__((unused)))
 {
-    restorecon(filename);
+    restorecon_sb(filename, statptr);
     return 0;
 }
 
@@ -525,5 +550,9 @@ int restorecon_recursive(const char* pathname)
 {
     int fd_limit = 20;
     int flags = FTW_DEPTH | FTW_MOUNT | FTW_PHYS;
+
+    if (is_selinux_enabled() <= 0 || !sehandle)
+        return 0;
+
     return nftw(pathname, nftw_restorecon, fd_limit, flags);
 }

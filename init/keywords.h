@@ -8,6 +8,7 @@ int do_class_reset(int nargs, char **args);
 int do_domainname(int nargs, char **args);
 int do_exec(int nargs, char **args);
 int do_export(int nargs, char **args);
+int do_export_rc(int nargs, char **args);
 int do_hostname(int nargs, char **args);
 int do_ifup(int nargs, char **args);
 int do_insmod(int nargs, char **args);
@@ -17,6 +18,7 @@ int do_mount(int nargs, char **args);
 int do_powerctl(int nargs, char **args);
 int do_restart(int nargs, char **args);
 int do_restorecon(int nargs, char **args);
+int do_restorecon_recursive(int nargs, char **args);
 int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
 int do_setcon(int nargs, char **args);
@@ -38,6 +40,8 @@ int do_chmod(int nargs, char **args);
 int do_loglevel(int nargs, char **args);
 int do_load_persist_props(int nargs, char **args);
 int do_wait(int nargs, char **args);
+int do_mknod(int nargs, char **args);
+
 #define __MAKE_KEYWORD_ENUM__
 #define KEYWORD(symbol, flags, nargs, func) K_##symbol,
 enum {
@@ -56,6 +60,7 @@ enum {
     KEYWORD(domainname,  COMMAND, 1, do_domainname)
     KEYWORD(exec,        COMMAND, 1, do_exec)
     KEYWORD(export,      COMMAND, 2, do_export)
+    KEYWORD(export_rc,   COMMAND, 1, do_export_rc)
     KEYWORD(group,       OPTION,  0, 0)
     KEYWORD(hostname,    COMMAND, 1, do_hostname)
     KEYWORD(ifup,        COMMAND, 1, do_ifup)
@@ -71,6 +76,7 @@ enum {
     KEYWORD(powerctl,    COMMAND, 1, do_powerctl)
     KEYWORD(restart,     COMMAND, 1, do_restart)
     KEYWORD(restorecon,  COMMAND, 1, do_restorecon)
+    KEYWORD(restorecon_recursive,  COMMAND, 1, do_restorecon_recursive)
     KEYWORD(rm,          COMMAND, 1, do_rm)
     KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
     KEYWORD(seclabel,    OPTION,  0, 0)
@@ -96,6 +102,7 @@ enum {
     KEYWORD(chown,       COMMAND, 2, do_chown)
     KEYWORD(chmod,       COMMAND, 2, do_chmod)
     KEYWORD(loglevel,    COMMAND, 1, do_loglevel)
+    KEYWORD(mknod,       COMMAND, 4, do_mknod)
     KEYWORD(load_persist_props,    COMMAND, 0, do_load_persist_props)
     KEYWORD(ioprio,      OPTION,  0, 0)
 #ifdef __MAKE_KEYWORD_ENUM__
