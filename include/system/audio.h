@@ -65,6 +65,7 @@ typedef enum {
     AUDIO_STREAM_PATCH            = 12, /* For internal audio flinger tracks. Fixed volume */
     AUDIO_STREAM_PUBLIC_CNT       = AUDIO_STREAM_TTS + 1,
     AUDIO_STREAM_CNT              = AUDIO_STREAM_PATCH + 1,
+    AUDIO_STREAM_INCALL_MUSIC     = 13,
 } audio_stream_type_t;
 
 /* Do not change these values without updating their counterparts
