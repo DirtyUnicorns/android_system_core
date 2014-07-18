@@ -25,6 +25,7 @@
 #include <ftw.h>
 
 #include <selinux/label.h>
+#include <selinux/android.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -482,10 +483,6 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     int fd, n;
     char *x, *hw, *rev;
 
-    /* Hardware string was provided on kernel command line */
-    if (hardware[0])
-        return;
-
     fd = open("/proc/cpuinfo", O_RDONLY);
     if (fd < 0) return;
 
@@ -497,18 +494,21 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     hw = strstr(data, "\nHardware");
     rev = strstr(data, "\nRevision");
 
-    if (hw) {
-        x = strstr(hw, ": ");
-        if (x) {
-            x += 2;
-            n = 0;
-            while (*x && *x != '\n') {
-                if (!isspace(*x))
-                    hardware[n++] = tolower(*x);
-                x++;
-                if (n == 31) break;
+    /* Hardware string was provided on kernel command line */
+    if (!hardware[0]) {
+        if (hw) {
+            x = strstr(hw, ": ");
+            if (x) {
+                x += 2;
+                n = 0;
+                while (*x && *x != '\n') {
+                    if (!isspace(*x))
+                        hardware[n++] = tolower(*x);
+                    x++;
+                    if (n == 31) break;
+                }
+                hardware[n] = 0;
             }
-            hardware[n] = 0;
         }
     }
 
@@ -573,60 +573,12 @@ int make_dir(const char *path, mode_t mode)
     return rc;
 }
 
-static int restorecon_sb(const char *pathname, const struct stat *sb)
+int restorecon(const char* pathname)
 {
-    char *secontext = NULL;
-    char *oldsecontext = NULL;
-    int i;
-
-    if (selabel_lookup(sehandle, &secontext, pathname, sb->st_mode) < 0)
-        return -errno;
-
-    if (lgetfilecon(pathname, &oldsecontext) < 0) {
-        freecon(secontext);
-        return -errno;
-    }
-
-    if (strcmp(oldsecontext, secontext) != 0) {
-        if (lsetfilecon(pathname, secontext) < 0) {
-            freecon(oldsecontext);
-            freecon(secontext);
-            return -errno;
-        }
-    }
-    freecon(oldsecontext);
-    freecon(secontext);
-    return 0;
-}
-
-int restorecon(const char *pathname)
-{
-    struct stat sb;
-
-    if (is_selinux_enabled() <= 0 || !sehandle)
-        return 0;
-
-    if (lstat(pathname, &sb) < 0)
-        return -errno;
-
-    return restorecon_sb(pathname, &sb);
-}
-
-static int nftw_restorecon(const char* filename, const struct stat* statptr,
-    int fileflags __attribute__((unused)),
-    struct FTW* pftw __attribute__((unused)))
-{
-    restorecon_sb(filename, statptr);
-    return 0;
+    return selinux_android_restorecon(pathname, 0);
 }
 
 int restorecon_recursive(const char* pathname)
 {
-    int fd_limit = 20;
-    int flags = FTW_DEPTH | FTW_MOUNT | FTW_PHYS;
-
-    if (is_selinux_enabled() <= 0 || !sehandle)
-        return 0;
-
-    return nftw(pathname, nftw_restorecon, fd_limit, flags);
+    return selinux_android_restorecon(pathname, SELINUX_ANDROID_RESTORECON_RECURSE);
 }

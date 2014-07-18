@@ -74,11 +74,17 @@ static int property_triggers_enabled = 0;
 static int   bootchart_count;
 #endif
 
+#ifndef BOARD_CHARGING_CMDLINE_NAME
+#define BOARD_CHARGING_CMDLINE_NAME "androidboot.battchg_pause"
+#define BOARD_CHARGING_CMDLINE_VALUE "true"
+#endif
+
 static char console[32];
 static char bootmode[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
+static char battchg_pause[32];
 
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
@@ -102,7 +108,7 @@ static const char *ENV[32];
 
 static unsigned emmc_boot = 0;
 
-static unsigned lpm_bootmode = 0;
+static unsigned charging_mode = 0;
 
 static const char *expand_environment(const char *val)
 {
@@ -746,6 +752,7 @@ static int console_init_action(int nargs, char **args)
     if (fd >= 0)
         have_console = 1;
     close(fd);
+
 #ifdef INITLOGO
     if( load_565rle_image(INIT_IMAGE_FILE) ) {
         fd = open("/dev/tty0", O_WRONLY);
@@ -808,12 +815,8 @@ static void import_kernel_nv(char *name, int for_emulator)
             emmc_boot = 1;
         }
 #endif
-#ifdef BOARD_LPM_BOOT_ARGUMENT_NAME
-    } else if (!strcmp(name,BOARD_LPM_BOOT_ARGUMENT_NAME)) {
-        if (!strcmp(value,BOARD_LPM_BOOT_ARGUMENT_VALUE)) {
-            lpm_bootmode = 1;
-        }
-#endif
+    } else if (!strcmp(name,BOARD_CHARGING_CMDLINE_NAME)) {
+        strlcpy(battchg_pause, value, sizeof(battchg_pause));
     } else if (!strncmp(name, "androidboot.", 12) && name_len > 12) {
         const char *boot_prop_name = name + 12;
         char prop[PROP_NAME_MAX];
@@ -822,10 +825,6 @@ static void import_kernel_nv(char *name, int for_emulator)
         cnt = snprintf(prop, sizeof(prop), "ro.boot.%s", boot_prop_name);
         if (cnt < PROP_NAME_MAX)
             property_set(prop, value);
-#ifdef HAS_SEMC_BOOTLOADER
-    } else if (!strcmp(name,"serialno")) {
-        property_set("ro.boot.serialno", value);
-#endif
     }
 }
 
@@ -988,6 +987,7 @@ struct selabel_handle* selinux_android_prop_context_handle(void)
 void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
+    selinux_android_set_sehandle(sehandle);
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
@@ -1059,6 +1059,25 @@ int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
     return 0;
 }
 
+static int charging_mode_booting(void)
+{
+#ifndef BOARD_CHARGING_MODE_BOOTING_LPM
+    return 0;
+#else
+    int f;
+    char cmb;
+    f = open(BOARD_CHARGING_MODE_BOOTING_LPM, O_RDONLY);
+    if (f < 0)
+        return 0;
+
+    if (1 != read(f, (void *)&cmb,1))
+        return 0;
+
+    close(f);
+    return ('1' == cmb);
+#endif
+}
+
 static void selinux_initialize(void)
 {
     if (selinux_is_disabled()) {
@@ -1076,25 +1095,6 @@ static void selinux_initialize(void)
     bool is_enforcing = selinux_is_enforcing();
     INFO("SELinux: security_setenforce(%d)\n", is_enforcing);
     security_setenforce(is_enforcing);
-}
-
-static int charging_mode_booting(void)
-{
-#ifndef BOARD_CHARGING_MODE_BOOTING_LPM
-	return lpm_bootmode;
-#else
-	int f;
-	char cmb;
-	f = open(BOARD_CHARGING_MODE_BOOTING_LPM, O_RDONLY);
-	if (f < 0)
-		return 0;
-
-	if (1 != read(f, (void *)&cmb,1))
-		return 0;
-
-	close(f);
-	return ('1' == cmb);
-#endif
 }
 
 int main(int argc, char **argv)
@@ -1122,6 +1122,11 @@ int main(int argc, char **argv)
          * together in the initramdisk on / and then we'll
          * let the rc file figure out the rest.
          */
+    /* Don't repeat the setup of these filesystems,
+     * it creates double mount points with an unknown effect
+     * on the system.  This init file is for 2nd-init anyway.
+     */
+#ifndef NO_DEVFS_SETUP
     mkdir("/dev", 0755);
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
@@ -1144,6 +1149,7 @@ int main(int argc, char **argv)
          */
     open_devnull_stdio();
     klog_init();
+#endif
     property_init();
 
     get_hardware_name(hardware, &revision);
@@ -1205,11 +1211,11 @@ int main(int argc, char **argv)
     /* skip mounting filesystems in charger mode */
     if (!is_charger) {
         action_for_each_trigger("early-fs", action_add_queue_tail);
-    if(emmc_boot) {
-        action_for_each_trigger("emmc-fs", action_add_queue_tail);
-    } else {
-        action_for_each_trigger("fs", action_add_queue_tail);
-    }
+        if(emmc_boot) {
+            action_for_each_trigger("emmc-fs", action_add_queue_tail);
+        } else {
+            action_for_each_trigger("fs", action_add_queue_tail);
+        }
         action_for_each_trigger("post-fs", action_add_queue_tail);
         action_for_each_trigger("post-fs-data", action_add_queue_tail);
     }
@@ -1222,6 +1228,11 @@ int main(int argc, char **argv)
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
+
+    /* Older bootloaders use non-standard charging modes. Check for
+     * those now, after mounting the filesystems */
+    if (strcmp(battchg_pause, BOARD_CHARGING_CMDLINE_VALUE) == 0)
+        is_charger = 1;
 
     if (is_charger) {
         action_for_each_trigger("charger", action_add_queue_tail);

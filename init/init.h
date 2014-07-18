@@ -140,6 +140,7 @@ void property_changed(const char *name, const char *value);
 
 int load_565rle_image( char *file_name );
 #endif
+
 extern struct selabel_handle *sehandle;
 extern struct selabel_handle *sehandle_prop;
 extern int selinux_reload_policy(void);

@@ -41,7 +41,6 @@ int do_loglevel(int nargs, char **args);
 int do_load_persist_props(int nargs, char **args);
 int do_wait(int nargs, char **args);
 int do_mknod(int nargs, char **args);
-
 #define __MAKE_KEYWORD_ENUM__
 #define KEYWORD(symbol, flags, nargs, func) K_##symbol,
 enum {

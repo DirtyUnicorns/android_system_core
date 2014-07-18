@@ -68,7 +68,7 @@ static int mkdirs(char *name)
                 *x = '/';
                 return ret;
             }
-            selinux_android_restorecon(name);
+            selinux_android_restorecon(name, 0);
         }
         *x++ = '/';
     }
@@ -132,6 +132,7 @@ static int do_list(int s, const char *path)
 
             if(writex(s, &msg.dent, sizeof(msg.dent)) ||
                writex(s, de->d_name, len)) {
+                closedir(d);
                 return -1;
             }
         }
@@ -245,7 +246,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
     if(fd >= 0) {
         struct utimbuf u;
         adb_close(fd);
-        selinux_android_restorecon(path);
+        selinux_android_restorecon(path, 0);
         u.actime = timestamp;
         u.modtime = timestamp;
         utime(path, &u);
