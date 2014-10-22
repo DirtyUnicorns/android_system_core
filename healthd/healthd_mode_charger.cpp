@@ -40,10 +40,6 @@
 #include <cutils/uevent.h>
 #include <cutils/properties.h>
 
-#include <pthread.h>
-#include <linux/android_alarm.h>
-#include <linux/rtc.h>
-
 #ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
 #endif
@@ -211,17 +207,6 @@ static struct android::BatteryProperties *batt_prop;
 static int char_width;
 static int char_height;
 static bool minui_inited;
-
-enum alarm_time_type {
-    ALARM_TIME,
-    RTC_TIME,
-};
-
-/*
- * shouldn't be changed after
- * reading from alarm register
- */
-static time_t alm_secs;
 
 static int set_tricolor_led(int on, int color)
 {
