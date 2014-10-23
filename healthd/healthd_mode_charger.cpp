@@ -80,6 +80,7 @@ char *locale;
 #define GREEN_LED_PATH          "/sys/class/leds/green/brightness"
 #define BLUE_LED_PATH           "/sys/class/leds/blue/brightness"
 #define BACKLIGHT_PATH          "/sys/class/leds/lcd-backlight/brightness"
+#define CHARGING_ENABLED_PATH   "/sys/class/power_supply/battery/charging_enabled"
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
 #define LOGW(x...) do { KLOG_WARNING("charger", x); } while (0)
@@ -827,6 +828,7 @@ static void charger_event_handler(uint32_t /*epevents*/)
 void healthd_mode_charger_init(struct healthd_config* config)
 {
     int ret;
+    int charging_enabled = 1;
     struct charger *charger = &charger_state;
     int i;
     int epollfd;
@@ -834,6 +836,14 @@ void healthd_mode_charger_init(struct healthd_config* config)
     dump_last_kmsg();
 
     LOGW("--------------- STARTING CHARGER MODE ---------------\n");
+
+    /* check the charging is enabled or not */
+    ret = read_file_int(CHARGING_ENABLED_PATH, &charging_enabled);
+    if (!ret && !charging_enabled) {
+        /* if charging is disabled, reboot and exit power off charging */
+        LOGI("android charging is disabled, exit!\n");
+        android_reboot(ANDROID_RB_RESTART, 0, 0);
+    }
 
     ret = ev_init(input_callback, charger);
     if (!ret) {
