@@ -29,7 +29,9 @@ LOCAL_C_INCLUDES := \
     system/extras/ext4_utils \
     external/openssl/include \
     bootable/recovery \
-    external/e2fsprogs/lib
+    external/e2fsprogs/lib \
+    system/extras/ext4_utils \
+    system/extras/squashfs_utils
 
 LOCAL_MODULE:= libfs_mgr
 LOCAL_STATIC_LIBRARIES := $(common_static_libraries)
