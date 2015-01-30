@@ -606,6 +606,9 @@ void load_all_props(void)
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
 
+    /* ensure ro.boot.ftm gets set */
+    property_set("ro.boot.ftm", "0");
+
     /* Read vendor-specific property runtime overrides. */
     vendor_load_properties();
 
