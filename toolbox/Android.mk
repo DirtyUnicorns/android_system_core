@@ -175,7 +175,9 @@ OUR_TOOLS := \
     ps \
     readlink \
     renice \
+    restart \
     restorecon \
+    prlimit \
     rmmod \
     route \
     runcon \

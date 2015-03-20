@@ -67,6 +67,7 @@ struct healthd_config {
     android::String8 batteryChargeCounterPath;
 
     int (*energyCounter)(int64_t *);
+    bool (*screen_on)(android::BatteryProperties *props);
 };
 
 // Global helper functions
@@ -85,11 +86,6 @@ struct healthd_mode_ops {
 };
 
 extern struct healthd_mode_ops *healthd_mode_ops;
-
-enum MODE {
-    NORMAL = 0,
-    QUICKBOOT,
-};
 
 // Charger mode
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-extern int sdcard_main(int argc, char **argv);
-
-int main(int argc, char **argv) {
-    return sdcard_main(argc, argv);
-}
+#ifndef _HEALTHD_MSM_H_
+#define _HEALTHD_MSM_H_
+void power_off_alarm_init(void);
+#endif /* _HEALTHD_MSM_H_ */

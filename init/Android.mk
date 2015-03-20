@@ -15,8 +15,7 @@ LOCAL_SRC_FILES:= \
 	init_parser.c \
 	ueventd.c \
 	ueventd_parser.c \
-	watchdogd.c \
-	vendor_init.c
+	watchdogd.c
 
 LOCAL_CFLAGS    += -Wno-unused-parameter
 
@@ -49,12 +48,6 @@ LOCAL_STATIC_LIBRARIES := \
 	libext4_utils_static
 
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-ifneq ($(strip $(TARGET_PLATFORM_DEVICE_BASE)),)
-LOCAL_CFLAGS += -D_PLATFORM_BASE="\"$(TARGET_PLATFORM_DEVICE_BASE)\""
-endif
-ifneq ($(strip $(TARGET_INIT_VENDOR_LIB)),)
-LOCAL_WHOLE_STATIC_LIBRARIES += $(TARGET_INIT_VENDOR_LIB)
-endif
 
 include $(BUILD_EXECUTABLE)
 

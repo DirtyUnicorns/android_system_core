@@ -329,9 +329,9 @@ void sanitize(char *s)
     if (!s)
         return;
 
-    for (; *s; s++) {
+    while (*s) {
         s += strspn(s, accept);
-        if (*s) *s = '_';
+        if (*s) *s++ = '_';
     }
 }
 
@@ -412,6 +412,10 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     int fd, n;
     char *x, *hw, *rev;
 
+    /* Hardware string was provided on kernel command line */
+    if (hardware[0])
+        return;
+
     fd = open(cpuinfo, O_RDONLY);
     if (fd < 0) return;
 
@@ -441,21 +445,18 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     hw = strstr(data, "\nHardware");
     rev = strstr(data, "\nRevision");
 
-    /* Hardware string was provided on kernel command line */
-    if (!hardware[0]) {
-        if (hw) {
-            x = strstr(hw, ": ");
-            if (x) {
-                x += 2;
-                n = 0;
-                while (*x && *x != '\n') {
-                    if (!isspace(*x))
-                        hardware[n++] = tolower(*x);
-                    x++;
-                    if (n == 31) break;
-                }
-                hardware[n] = 0;
+    if (hw) {
+        x = strstr(hw, ": ");
+        if (x) {
+            x += 2;
+            n = 0;
+            while (*x && *x != '\n') {
+                if (!isspace(*x))
+                    hardware[n++] = tolower(*x);
+                x++;
+                if (n == 31) break;
             }
+            hardware[n] = 0;
         }
     }
 
@@ -529,11 +530,7 @@ int restorecon(const char* pathname)
     return selinux_android_restorecon(pathname, 0);
 }
 
-#define RESTORECON_RECURSIVE_FLAGS \
-        (SELINUX_ANDROID_RESTORECON_FORCE | \
-        SELINUX_ANDROID_RESTORECON_RECURSE)
-
 int restorecon_recursive(const char* pathname)
 {
-    return selinux_android_restorecon(pathname, RESTORECON_RECURSIVE_FLAGS);
+    return selinux_android_restorecon(pathname, SELINUX_ANDROID_RESTORECON_RECURSE);
 }
