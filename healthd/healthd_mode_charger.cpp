@@ -357,6 +357,56 @@ out:
     LOGW("\n");
 }
 
+static int read_file(const char *path, char *buf, size_t sz)
+{
+    int fd;
+    size_t cnt;
+
+    fd = open(path, O_RDONLY, 0);
+    if (fd < 0)
+        goto err;
+
+    cnt = read(fd, buf, sz - 1);
+    if (cnt <= 0)
+        goto err;
+    buf[cnt] = '\0';
+    if (buf[cnt - 1] == '\n') {
+        cnt--;
+        buf[cnt] = '\0';
+    }
+
+    close(fd);
+    return cnt;
+
+err:
+    if (fd >= 0)
+        close(fd);
+    return -1;
+}
+
+static int read_file_int(const char *path, int *val)
+{
+    char buf[32];
+    int ret;
+    int tmp;
+    char *end;
+
+    ret = read_file(path, buf, sizeof(buf));
+    if (ret < 0)
+        return -1;
+
+    tmp = strtol(buf, &end, 0);
+    if (end == buf ||
+        ((end < buf+sizeof(buf)) && (*end != '\n' && *end != '\0')))
+        goto err;
+
+    *val = tmp;
+    return 0;
+
+err:
+    return -1;
+}
+
 #ifdef CHARGER_ENABLE_SUSPEND
 static int request_suspend(bool enable)
 {
@@ -711,12 +761,15 @@ static void handle_input_state(struct charger *charger, int64_t now)
 static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
     static int old_soc = 0;
-    int soc;
+    int soc = 0;
 
     if (!charger->have_battery_state)
         return;
 
-    soc = get_battery_capacity();
+    if (batt_prop && batt_prop->batteryLevel >= 0) {
+        soc = batt_prop->batteryLevel;
+    }
+
     if (old_soc != soc) {
         old_soc = soc;
         set_battery_soc_leds(soc);
