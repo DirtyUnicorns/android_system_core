@@ -399,6 +399,9 @@ on post-fs-data
     # Run sysinit
     start sysinit
 
+    # Include extra init file
+    import /init.du.rc
+
 on boot
     # basic network init
     ifup lo
