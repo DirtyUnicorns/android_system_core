@@ -49,6 +49,10 @@ LOCAL_SRC_FILES:= \
     ueventd_parser.cpp \
     watchdogd.cpp \
 
+ifneq ($(TARGET_IGNORE_RO_BOOT_REVISION),)
+LOCAL_CFLAGS += -DIGNORE_RO_BOOT_REVISION
+endif
+
 LOCAL_MODULE:= init
 LOCAL_C_INCLUDES += \
     system/extras/ext4_utils \
