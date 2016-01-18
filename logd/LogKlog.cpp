@@ -288,6 +288,7 @@ void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
     if ((cp = now.strptime(*buf, "[ %s.%q]"))) {
         static const char suspend[] = "PM: suspend entry ";
         static const char resume[] = "PM: suspend exit ";
+        static const char healthd[] = "healthd: battery ";
         static const char suspended[] = "Suspended for ";
 
         if (isspace(*cp)) {
@@ -297,6 +298,15 @@ void LogKlog::sniffTime(log_time &now, const char **buf, bool reverse) {
             calculateCorrection(now, cp + sizeof(suspend) - 1);
         } else if (!strncmp(cp, resume, sizeof(resume) - 1)) {
             calculateCorrection(now, cp + sizeof(resume) - 1);
+        } else if (!strncmp(cp, healthd, sizeof(healthd) - 1)) {
+            // look for " 2???-??-?? ??:??:??.????????? ???"
+            const char *tp;
+            for (tp = cp + sizeof(healthd) - 1; *tp && (*tp != '\n'); ++tp) {
+                if ((tp[0] == ' ') && (tp[1] == '2') && (tp[5] == '-')) {
+                    calculateCorrection(now, tp + 1);
+                    break;
+                }
+            }
         } else if (!strncmp(cp, suspended, sizeof(suspended) - 1)) {
             log_time real;
             char *endp;
@@ -652,7 +662,7 @@ int LogKlog::log(const char *buf) {
         rc = -ENOMEM;
         return rc;
     }
-    char *np = newstr;
+    np = newstr;
 
     // Convert priority into single-byte Android logger priority
     *np = convertKernelPrioToAndroidPrio(pri);
