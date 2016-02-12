@@ -10,6 +10,7 @@ import /init.${ro.hardware}.rc
 import /init.usb.configfs.rc
 import /init.${ro.zygote}.rc
 import /init.trace.rc
+import /init.du.rc
 
 on early-init
     # Set init and its forked children's oom_adj.
@@ -403,9 +404,6 @@ on post-fs-data
     # won't work.
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
-
-    # Include extra init file
-    import /init.du.rc
 
 on boot
     # basic network init
