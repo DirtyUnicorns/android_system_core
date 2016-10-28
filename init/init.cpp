@@ -18,7 +18,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fstream>
 #include <libgen.h>
 #include <paths.h>
 #include <signal.h>
@@ -161,15 +160,19 @@ void handle_control_message(const std::string& msg, const std::string& name) {
 
 static int wait_for_coldboot_done_action(const std::vector<std::string>& args) {
     Timer t;
-
+    int timeout = 0;
+#ifdef COLDBOOT_TIMEOUT_OVERRIDE
+    timeout = COLDBOOT_TIMEOUT_OVERRIDE;
+#else
+    timeout = 5;
+#endif
     NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
     // Any longer than 1s is an unreasonable length of time to delay booting.
     // If you're hitting this timeout, check that you didn't make your
     // sepolicy regular expressions too expensive (http://b/19899875).
-    if (wait_for_file(COLDBOOT_DONE, 1)) {
+    if (wait_for_file(COLDBOOT_DONE, timeout)) {
         ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
     }
-
     NOTICE("Waiting for %s took %.2fs.\n", COLDBOOT_DONE, t.duration());
     return 0;
 }
@@ -251,100 +254,6 @@ ret:
     return result;
 }
 
-static void security_failure() {
-    ERROR("Security failure; rebooting into recovery mode...\n");
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (true) { pause(); }  // never reached
-}
-
-#define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
-#define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
-
-/* __attribute__((unused)) due to lack of mips support: see mips block
- * in set_mmap_rnd_bits_action */
-static bool __attribute__((unused)) set_mmap_rnd_bits_min(int start, int min, bool compat) {
-    std::string path;
-    if (compat) {
-        path = MMAP_RND_COMPAT_PATH;
-    } else {
-        path = MMAP_RND_PATH;
-    }
-    std::ifstream inf(path, std::fstream::in);
-    if (!inf) {
-        return false;
-    }
-    while (start >= min) {
-        // try to write out new value
-        std::string str_val = std::to_string(start);
-        std::ofstream of(path, std::fstream::out);
-        if (!of) {
-            return false;
-        }
-        of << str_val << std::endl;
-        of.close();
-
-        // check to make sure it was recorded
-        inf.seekg(0);
-        std::string str_rec;
-        inf >> str_rec;
-        if (str_val.compare(str_rec) == 0) {
-            break;
-        }
-        start--;
-    }
-    inf.close();
-    return (start >= min);
-}
-
-/*
- * Set /proc/sys/vm/mmap_rnd_bits and potentially
- * /proc/sys/vm/mmap_rnd_compat_bits to the maximum supported values.
- * Returns -1 if unable to set these to an acceptable value.  Apply
- * upstream patch-sets https://lkml.org/lkml/2015/12/21/337 and
- * https://lkml.org/lkml/2016/2/4/831 to enable this.
- */
-static int set_mmap_rnd_bits_action(const std::vector<std::string>& args)
-{
-    int ret = -1;
-
-    /* values are arch-dependent */
-#if defined(__aarch64__)
-    /* arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE */
-    if (set_mmap_rnd_bits_min(33, 24, false)
-            && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
-    }
-#elif defined(__x86_64__)
-    /* x86_64 supports 28 - 32 bits */
-    if (set_mmap_rnd_bits_min(32, 32, false)
-            && set_mmap_rnd_bits_min(16, 16, true)) {
-        ret = 0;
-    }
-#elif defined(__arm__) || defined(__i386__)
-    /* check to see if we're running on 64-bit kernel */
-    bool h64 = !access(MMAP_RND_COMPAT_PATH, F_OK);
-    /* supported 32-bit architecture must have 16 bits set */
-    if (set_mmap_rnd_bits_min(16, 16, h64)) {
-        ret = 0;
-    }
-#elif defined(__mips__) || defined(__mips64__)
-    // TODO: add mips support b/27788820
-    ret = 0;
-#else
-    ERROR("Unknown architecture\n");
-#endif
-
-#ifdef __BRILLO__
-    // TODO: b/27794137
-    ret = 0;
-#endif
-    if (ret == -1) {
-        ERROR("Unable to set adequate mmap entropy value!\n");
-        security_failure();
-    }
-    return ret;
-}
-
 static int keychord_init_action(const std::vector<std::string>& args)
 {
     keychord_init();
@@ -353,15 +262,31 @@ static int keychord_init_action(const std::vector<std::string>& args)
 
 static int console_init_action(const std::vector<std::string>& args)
 {
+    int fd = -1;
     std::string console = property_get("ro.boot.console");
     if (!console.empty()) {
         console_name = "/dev/" + console;
     }
-
-    int fd = open(console_name.c_str(), O_RDWR | O_CLOEXEC);
+    fd = open(console_name.c_str(), O_RDWR | O_CLOEXEC);
+#ifdef CONSOLE_TIMEOUT_SEC
+    int num_console_retries = 0;
+    while ((fd < 0) && num_console_retries++ < CONSOLE_TIMEOUT_SEC) {
+        ERROR("Failed to open console device %s(%s)..Retrying\n",
+                       console_name.c_str(), strerror(errno));
+        sleep(1);
+        fd = open(console_name.c_str(), O_RDWR | O_CLOEXEC);
+    }
     if (fd >= 0)
+        INFO("Console device located");
+#endif
+    if (fd >= 0) {
         have_console = 1;
-    close(fd);
+        close(fd);
+    } else {
+        ERROR("console init failed. Open on Console device %s failed(%s)\n",
+                         console.c_str(), strerror(errno));
+        return 0;
+    }
 
     fd = open("/dev/tty0", O_WRONLY | O_CLOEXEC);
     if (fd >= 0) {
@@ -547,6 +472,12 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     return 0;
 }
 
+static void security_failure() {
+    ERROR("Security failure; rebooting into recovery mode...\n");
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (true) { pause(); }  // never reached
+}
+
 static void selinux_initialize(bool in_kernel_domain) {
     Timer t;
 
@@ -695,7 +626,6 @@ int main(int argc, char** argv) {
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
     // ... so that we can start queuing up actions that require stuff from /dev.
     am.QueueBuiltinAction(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
-    am.QueueBuiltinAction(set_mmap_rnd_bits_action, "set_mmap_rnd_bits");
     am.QueueBuiltinAction(keychord_init_action, "keychord_init");
     am.QueueBuiltinAction(console_init_action, "console_init");
 
@@ -710,6 +640,9 @@ int main(int argc, char** argv) {
     std::string bootmode = property_get("ro.bootmode");
     if (bootmode == "charger") {
         am.QueueEventTrigger("charger");
+    } else if (strncmp(bootmode.c_str(), "ffbm", 4) == 0) {
+        NOTICE("Booting into ffbm mode\n");
+        am.QueueEventTrigger("ffbm");
     } else {
         am.QueueEventTrigger("late-init");
     }

@@ -48,6 +48,7 @@
 #include "ueventd_parser.h"
 #include "util.h"
 #include "log.h"
+#include "property_service.h"
 
 #define SYSFS_PREFIX    "/sys"
 static const char *firmware_dirs[] = { "/etc/firmware",
@@ -55,6 +56,8 @@ static const char *firmware_dirs[] = { "/etc/firmware",
                                        "/firmware/image" };
 
 extern struct selabel_handle *sehandle;
+
+extern std::string boot_device;
 
 static int device_fd = -1;
 
@@ -526,6 +529,11 @@ static char **get_block_device_symlinks(struct uevent *uevent)
     else
         links[link_num] = NULL;
 
+    if (pdev && !boot_device.empty() && strstr(device, boot_device.c_str())) {
+        /* Create bootdevice symlink for platform boot stroage device */
+        make_link_init(link_path, "/dev/block/bootdevice");
+    }
+
     return links;
 }
 
@@ -731,8 +739,30 @@ static void handle_generic_device_event(struct uevent *uevent)
          base = "/dev/log/";
          make_dir(base, 0755);
          name += 4;
-     } else
-         base = "/dev/";
+     } else if (!strncmp(uevent->subsystem, "dvb", 3)) {
+         /* This imitates the file system that would be created
+          * if we were using devfs instead to preserve backward compatibility
+          * for users of dvb devices
+          */
+         int adapter_id=0;
+         char dev_name[20] = {0};
+
+         sscanf(name, "dvb%d.%s", &adapter_id, dev_name);
+
+         /* build dvb directory */
+         base = "/dev/dvb";
+         mkdir(base, 0755);
+
+         /* build adapter directory */
+         snprintf(devpath, sizeof(devpath), "/dev/dvb/adapter%d", adapter_id);
+         mkdir(devpath, 0755);
+
+         /* build actual device directory */
+         snprintf(devpath, sizeof(devpath), "/dev/dvb/adapter%d/%s",
+                 adapter_id, dev_name);
+     }
+     else
+        base = "/dev/";
      links = get_character_device_symlinks(uevent);
 
      if (!devpath[0])
