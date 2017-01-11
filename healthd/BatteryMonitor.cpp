@@ -36,6 +36,10 @@
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
+#ifdef BATTERY_REAL_INFO
+#define SYSFS_BATTERY_CURRENT "/sys/class/power_supply/battery/current_now"
+#define SYSFS_BATTERY_VOLTAGE "/sys/class/power_supply/battery/voltage_now"
+#endif
 #define FAKE_BATTERY_CAPACITY 42
 #define FAKE_BATTERY_TEMPERATURE 424
 #define ALWAYS_PLUGGED_CAPACITY 100
@@ -313,6 +317,14 @@ bool BatteryMonitor::update(void) {
                             }
 
                             //If its online, read the voltage and current for power
+#ifdef BATTERY_REAL_INFO
+                            int ChargingCurrent =
+                                (access(SYSFS_BATTERY_CURRENT, R_OK) == 0) ? abs(getIntField(String8(SYSFS_BATTERY_CURRENT))) : 0;
+
+                            int ChargingVoltage =
+                                (access(SYSFS_BATTERY_VOLTAGE, R_OK) == 0) ? getIntField(String8(SYSFS_BATTERY_VOLTAGE)) :
+                                DEFAULT_VBUS_VOLTAGE;
+#else
                             path.clear();
                             path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
                                             name);
@@ -326,7 +338,7 @@ bool BatteryMonitor::update(void) {
                             int ChargingVoltage =
                               (access(path.string(), R_OK) == 0) ? getIntField(path) :
                               DEFAULT_VBUS_VOLTAGE;
-
+#endif
                             double power = ((double)ChargingCurrent / MILLION) *
                                     ((double)ChargingVoltage / MILLION);
                             if (MaxPower < power) {
