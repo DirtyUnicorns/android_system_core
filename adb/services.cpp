@@ -180,14 +180,14 @@ static void reconnect_service(int fd, void* arg) {
     kick_transport(t);
 }
 
-int reverse_service(const char* command) {
+int reverse_service(const char* command, atransport* transport) {
     int s[2];
     if (adb_socketpair(s)) {
         PLOG(ERROR) << "cannot create service socket pair.";
         return -1;
     }
     VLOG(SERVICES) << "service socketpair: " << s[0] << ", " << s[1];
-    if (handle_forward_request(command, kTransportAny, nullptr, 0, s[1]) < 0) {
+    if (handle_forward_request(command, transport, s[1]) < 0) {
         SendFail(s[1], "not a reverse forwarding command");
     }
     adb_close(s[1]);
@@ -274,7 +274,7 @@ static const char* bu_path()
 }
 #endif
 
-int service_to_fd(const char* name, const atransport* transport) {
+int service_to_fd(const char* name, atransport* transport) {
     int ret = -1;
 
     if (is_socket_spec(name)) {
@@ -324,7 +324,7 @@ int service_to_fd(const char* name, const atransport* transport) {
     } else if(!strncmp(name, "usb:", 4)) {
         ret = create_service_thread("usb", restart_usb_service, nullptr);
     } else if (!strncmp(name, "reverse:", 8)) {
-        ret = reverse_service(name + 8);
+        ret = reverse_service(name + 8, transport);
     } else if(!strncmp(name, "disable-verity:", 15)) {
         ret = create_service_thread("verity-on", set_verity_enabled_state_service,
                                     reinterpret_cast<void*>(0));
@@ -332,8 +332,7 @@ int service_to_fd(const char* name, const atransport* transport) {
         ret = create_service_thread("verity-off", set_verity_enabled_state_service,
                                     reinterpret_cast<void*>(1));
     } else if (!strcmp(name, "reconnect")) {
-        ret = create_service_thread("reconnect", reconnect_service,
-                                    const_cast<atransport*>(transport));
+        ret = create_service_thread("reconnect", reconnect_service, transport);
 #endif
     }
     if (ret >= 0) {
