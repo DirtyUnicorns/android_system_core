@@ -68,7 +68,7 @@ binder::Status ADBRootService::setEnabled(bool enabled) {
 
         // Turning off adb root, restart adbd.
         if (!enabled) {
-            base::SetProperty("lineage.service.adb.root", "0");
+            base::SetProperty("service.adb.root", "0");
             base::SetProperty("ctl.restart", "adbd");
         }
     }
